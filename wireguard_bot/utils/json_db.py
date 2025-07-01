@@ -3,8 +3,9 @@ import os
 import logging
 from datetime import datetime
 
-PEERS_FILE = "wireguard_bot/config/peers.json"
-ARCHIVE_FILE = "wireguard_bot/config/archive.json"
+CONFIG_DIR = Path(__file__).parent.parent / "config"
+PEERS_FILE = CONFIG_DIR / "peers.json"
+ARCHIVE_FILE = CONFIG_DIR / "archive.json"
 
 logger = logging.getLogger("JsonDB")
 logger.setLevel(logging.DEBUG)
