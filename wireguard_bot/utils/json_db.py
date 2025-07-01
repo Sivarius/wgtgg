@@ -2,6 +2,9 @@ import json
 import os
 from datetime import datetime
 
+PEERS_FILE = "wireguard_bot/config/peers.json"
+ARCHIVE_FILE = "wireguard_bot/config/archive.json"
+
 class JsonDB:
     def __init__(self, filepath):
         self.filepath = filepath
@@ -38,7 +41,7 @@ class JsonDB:
         Автоматически генерирует уникальный ID в формате idN.
         Возвращает сгенерированный ID.
         """
-        new_id = self._generate_new_id()
+        new_id = self.get_next_id()
         self.data[new_id] = user_dict
         self._save()
         return new_id
@@ -59,13 +62,39 @@ class JsonDB:
 
     def _generate_new_id(self):
         """
-        Генерируем ID вида id1, id2, id3 и т.д. Уникальный в текущей базе.
+        Старый метод, больше не используется.
         """
         existing_ids = [int(k[2:]) for k in self.data.keys() if k.startswith("id") and k[2:].isdigit()]
         new_num = 1
         if existing_ids:
             new_num = max(existing_ids) + 1
         return f"id{new_num}"
+
+    def get_next_id(self):
+        """
+        Генерация следующего ID на основе peers.json и archive.json
+        """
+        peers = []
+        archive = []
+        if os.path.exists(PEERS_FILE):
+            with open(PEERS_FILE, 'r', encoding='utf-8') as f:
+                try:
+                    peers = json.load(f).get("peers", [])
+                except json.JSONDecodeError:
+                    pass
+
+        if os.path.exists(ARCHIVE_FILE):
+            with open(ARCHIVE_FILE, 'r', encoding='utf-8') as f:
+                try:
+                    archive = json.load(f).get("archive", [])
+                except json.JSONDecodeError:
+                    pass
+
+        all_ids = peers + archive
+        if not all_ids:
+            return "id1"
+        last_id = max(int(peer["id"][2:]) for peer in all_ids if "id" in peer and peer["id"].startswith("id"))
+        return f"id{last_id + 1}"
 
     def find_by_ip(self, ip):
         """
