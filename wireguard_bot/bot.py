@@ -4,6 +4,9 @@ from utils import wg_utils, json_db
 import os
 from datetime import datetime
 import asyncio
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from wireguard_bot.utils.notifier import send_notifications
+from wireguard_bot.utils.disabler import disable_expired_peers
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=API_TOKEN)
@@ -169,7 +172,18 @@ async def cmd_reload(message: types.Message):
         wg_utils.apply_peer(uid, user)
 
     await message.reply(f"🔄 Завершено. Просроченных пользователей отключено: {len(expired)}")
+    
+    # 🔁 Планировщик
+async def schedule_daily_jobs():
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(disable_expired_peers, "cron", hour=12, minute=0)
+    scheduler.add_job(lambda: send_notifications(bot), "cron", hour=12, minute=0)
+    scheduler.start()
+
+async def on_startup(dp):
+    await schedule_daily_jobs()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
