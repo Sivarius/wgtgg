@@ -2,6 +2,7 @@ import logging
 from aiogram import Bot, Dispatcher, executor, types
 from utils import wg_utils, json_db, notifier, disabler
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -11,6 +12,10 @@ CONFIG_DIR = BASE_DIR / "config"
 LOG_FILE = BASE_DIR / "logs" / "bot.txt"
 
 API_TOKEN = os.getenv("BOT_TOKEN")
+if not API_TOKEN:
+    print("[FATAL] BOT_TOKEN не задан. Установите переменную окружения BOT_TOKEN.", file=sys.stderr)
+    sys.exit(1)
+
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
@@ -188,7 +193,7 @@ async def cmd_reload(message: types.Message):
 def schedule_daily_jobs():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(disabler.disable_expired_peers, "cron", hour=12, minute=0)
-    scheduler.add_job(lambda: notifier.send_notifications(bot), "cron", hour=12, minute=0)
+    scheduler.add_job(notifier.send_notifications, "cron", hour=12, minute=0, args=[bot])
     scheduler.start()
     log("Scheduler started")
 
@@ -197,6 +202,5 @@ async def on_startup(dp):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    schedule_daily_jobs()
     log("Bot started")
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)

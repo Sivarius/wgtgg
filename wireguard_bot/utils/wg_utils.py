@@ -25,15 +25,19 @@ def _is_linux():
     return platform.system().lower() == "linux"
 
 
-def _run_command(command):
-    log(f"Выполнение команды: {command}")
-    result = subprocess.run(command, shell=True,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
+def _run_command(command: str):
+    # Backward-compat if строка передана — выполним через shell=False, разбивая на токены
+    # Используется редко; предпочтительнее _run_command_args
+    return _run_command_args(command.split())
+
+
+def _run_command_args(args: list):
+    log(f"Выполнение команды: {' '.join(args)}")
+    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         error_msg = result.stderr.decode(errors="ignore")
-        log(f"Ошибка при выполнении команды: {command}\nОшибка: {error_msg}")
-        raise RuntimeError(f"Ошибка при выполнении команды: {command}\n{error_msg}")
+        log(f"Ошибка при выполнении команды: {' '.join(args)}\nОшибка: {error_msg}")
+        raise RuntimeError(f"Ошибка при выполнении команды: {' '.join(args)}\n{error_msg}")
     output = result.stdout.decode(errors="ignore").strip()
     log(f"Результат команды: {output}")
     return output
@@ -56,9 +60,13 @@ def _generate_keys():
     log("Генерация ключей WireGuard")
     if _is_linux():
         try:
-            private_key = _run_command("wg genkey")
-            public_key = _run_command(f"echo {private_key} | wg pubkey")
-            preshared_key = _run_command("wg genpsk")
+            private_key = _run_command_args(["wg", "genkey"])  # приватный ключ
+            # публичный ключ из приватного через stdin
+            pub_proc = subprocess.run(["wg", "pubkey"], input=private_key.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if pub_proc.returncode != 0:
+                raise RuntimeError(pub_proc.stderr.decode(errors="ignore"))
+            public_key = pub_proc.stdout.decode().strip()
+            preshared_key = _run_command_args(["wg", "genpsk"])  # пред-ключ
             log("Ключи сгенерированы через wg")
             return private_key, public_key, preshared_key
         except Exception:
@@ -121,13 +129,16 @@ def apply_peer(client_id: str, user: dict):
     if not (pub and psk and ip):
         raise ValueError("Неполные данные пира для применения")
     # write PSK to temp file to avoid process substitution
-    tmp = tempfile.NamedTemporaryFile("w", delete=False)
+    tmp = tempfile.NamedTemporaryFile("w", delete=False, prefix="wgpsk_")
     try:
         tmp.write(psk + "\n")
         tmp.flush()
         tmp.close()
-        command = f"wg set {WG_INTERFACE} peer {pub} preshared-key {tmp.name} allowed-ips {ip}/32"
-        _run_command(command)
+        try:
+            os.chmod(tmp.name, 0o600)
+        except Exception:
+            pass
+        _run_command_args(["wg", "set", WG_INTERFACE, "peer", pub, "preshared-key", tmp.name, "allowed-ips", f"{ip}/32"])
     finally:
         try:
             os.unlink(tmp.name)
@@ -151,6 +162,5 @@ def remove_peer(client_id: str):
     if not pub:
         log(f"У пира {client_id} отсутствует public_key")
         return
-    command = f"wg set {WG_INTERFACE} peer {pub} remove"
-    _run_command(command)
+    _run_command_args(["wg", "set", WG_INTERFACE, "peer", pub, "remove"]) 
     log(f"Пир {client_id} удалён")
