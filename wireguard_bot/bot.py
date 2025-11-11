@@ -3,27 +3,30 @@ from aiogram import Bot, Dispatcher, executor, types
 from utils import wg_utils, json_db, notifier, disabler
 import os
 from datetime import datetime
-import asyncio
+from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+BASE_DIR = Path(__file__).parent
+CONFIG_DIR = BASE_DIR / "config"
+LOG_FILE = BASE_DIR / "logs" / "bot.txt"
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# оригинальные базы
-admins_db = json_db.JsonDB("wireguard_bot/config/admins.json")
-peers_db = json_db.JsonDB("wireguard_bot/config/peers.json")
-archive_db = json_db.JsonDB("wireguard_bot/config/archive.json")
-last_ip_db = json_db.JsonDB("wireguard_bot/config/last_ip.json")
-
-LOG_FILE = "/wireguard_bot/logs/bot.txt"
+# базы данных
+admins_db = json_db.JsonDB(str(CONFIG_DIR / "admins.json"))
+peers_db = json_db.JsonDB(str(CONFIG_DIR / "peers.json"))
+archive_db = json_db.JsonDB(str(CONFIG_DIR / "archive.json"))
+last_ip_db = json_db.JsonDB(str(CONFIG_DIR / "last_ip.json"))
 
 def log(msg: str):
-    with open(LOG_FILE, "a") as f:
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(f"[{datetime.now()}] {msg}\n")
 
 def is_admin(user_id: int) -> bool:
-    return user_id in admins_db.get("admins", [])
+    return user_id in (admins_db.get("admins", []) or [])
 
 @dp.message_handler(commands=["start", "help"])
 async def cmd_start(message: types.Message):
@@ -64,10 +67,11 @@ async def cmd_add(message: types.Message):
         return
     client_id, config_text, client_data = wg_utils.generate_client_config(name, expires, last_ip_db, peers_db)
     peers_db.set(client_id, client_data)
-    config_path = f"wireguard_bot/wg/clients/{client_id}.conf"
-    with open(config_path, "w") as f:
+    config_path = BASE_DIR / "wg" / "clients" / f"{client_id}.conf"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w", encoding="utf-8") as f:
         f.write(config_text)
-    await message.reply_document(types.InputFile(config_path), caption=f"✅ Пользователь `{client_id}` добавлен.")
+    await message.reply_document(types.InputFile(str(config_path)), caption=f"✅ Пользователь `{client_id}` добавлен.")
     log(f"Added client {client_id} by {message.from_user.id}")
 
 @dp.message_handler(commands=["list"])
@@ -183,8 +187,8 @@ async def cmd_reload(message: types.Message):
 
 def schedule_daily_jobs():
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(disable_expired_peers, "cron", hour=12, minute=0)
-    scheduler.add_job(lambda: send_notifications(bot), "cron", hour=12, minute=0)
+    scheduler.add_job(disabler.disable_expired_peers, "cron", hour=12, minute=0)
+    scheduler.add_job(lambda: notifier.send_notifications(bot), "cron", hour=12, minute=0)
     scheduler.start()
     log("Scheduler started")
 

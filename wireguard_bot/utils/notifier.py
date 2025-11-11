@@ -1,31 +1,37 @@
-# wireguard_bot/utils/notifier.py
+# utils/notifier.py
 from datetime import datetime
-from wireguard_bot.utils.json_db import load_json
+from utils.json_db import JsonDB
+from pathlib import Path
+
+CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 async def send_notifications(bot):
-    peers_data = load_json("config/peers.json")
-    peers = peers_data.get("peers", [])
+    peers_db = JsonDB(str(CONFIG_DIR / "peers.json"))
+    admins_db = JsonDB(str(CONFIG_DIR / "admins.json"))
 
-    admins_data = load_json("config/admins.json")
-    admins = admins_data.get("admins", [])
-
+    peers = peers_db.get_all()
+    admins = admins_db.get_admins()
     now = datetime.now()
 
-    for peer in peers:
-        expiry_str = peer.get("date")
+    for peer_id, peer in peers.items():
+        expiry_str = peer.get("deactivate_date") or peer.get("date")
         if not expiry_str:
             continue
-
-        try:
-            expiry_date = datetime.strptime(expiry_str, "%d.%m.%y")
-        except ValueError:
+        dt = None
+        for fmt in ("%d.%m.%Y", "%d.%m.%y"):
+            try:
+                dt = datetime.strptime(expiry_str, fmt)
+                break
+            except ValueError:
+                continue
+        if not dt:
             continue
-
-        if 0 <= (expiry_date - now).days < 3:
+        days = (dt - now).days
+        if 0 <= days < 3:
             for admin in admins:
                 message = (
-                    f"\u26a0\ufe0f Срок действия конфига *{peer['name']}* (`{peer['id']}`) "
-                    f"истекает *{peer['date']}*\n\n"
+                    f"⚠️ Срок действия конфига {peer.get('name', '?')} (`{peer_id}`) "
+                    f"истекает {expiry_str}\n\n"
                     f"Дата создания: {peer.get('created_at', 'N/A')}"
                 )
-                await bot.send_message(admin, message, parse_mode="Markdown")
+                await bot.send_message(admin, message)

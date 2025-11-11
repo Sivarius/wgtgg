@@ -1,0 +1,24 @@
+# Шаблон unit-файла systemd
+#
+# ВНИМАНИЕ: этот файл — шаблон. Скрипт deploy/install.sh сам сгенерирует
+# актуальный /etc/systemd/system/wireguard-bot.service с подставленным
+# WorkingDirectory и путём до Python из виртуального окружения.
+# Редактировать этот файл не требуется.
+
+[Unit]
+Description=WireGuard Telegram Bot
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{WORKING_DIR}}
+EnvironmentFile=/etc/wireguard-bot.env
+ExecStart={{WORKING_DIR}}/.venv/bin/python bot.py
+User=root
+Group=root
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
