@@ -20,7 +20,16 @@ fi
 HERE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${HERE_DIR}/.." && pwd)"
 PY_BIN="${REPO_DIR}/.venv/bin/python"
-REQS_FILE="${REPO_DIR}/requirements.txt"
+# Поиск requirements.txt: сперва внутри проекта, затем в родителе
+REQS_FILE_PRIMARY="${REPO_DIR}/requirements.txt"
+REQS_FILE_ALT="$(cd "${REPO_DIR}/.." && pwd)/requirements.txt"
+if [[ -f "${REQS_FILE_PRIMARY}" ]]; then
+  REQS_FILE="${REQS_FILE_PRIMARY}"
+elif [[ -f "${REQS_FILE_ALT}" ]]; then
+  REQS_FILE="${REQS_FILE_ALT}"
+else
+  REQS_FILE=""
+fi
 ENV_FILE="/etc/wireguard-bot.env"
 UNIT_FILE="/etc/systemd/system/wireguard-bot.service"
 
@@ -31,10 +40,11 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv python3-pip wireg
 echo "[*] Создание виртуального окружения и установка зависимостей..."
 python3 -m venv "${REPO_DIR}/.venv"
 "${REPO_DIR}/.venv/bin/pip" install --upgrade pip
-if [[ -f "${REQS_FILE}" ]]; then
+if [[ -n "${REQS_FILE}" && -f "${REQS_FILE}" ]]; then
+  echo "[*] Установка зависимостей из ${REQS_FILE}"
   "${REPO_DIR}/.venv/bin/pip" install -r "${REQS_FILE}"
 else
-  echo "[!] requirements.txt не найден, установка aiogram и APScheduler по умолчанию"
+  echo "[!] requirements.txt не найден ни в ${REPO_DIR}, ни в родителе; установка aiogram и APScheduler по умолчанию"
   "${REPO_DIR}/.venv/bin/pip" install aiogram \
     'APScheduler>=3,<4'
 fi

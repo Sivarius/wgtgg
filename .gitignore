@@ -1,12 +1,12 @@
-# Логи, сгенерированные конфиги и локальные базы
-logs/
-wg/clients/
-config/peers.json
-config/archive.json
-config/last_ip.json
+# Логи, сгенерированные конфиги и локальные базы (внутри подпроекта)
+wireguard_bot/logs/
+wireguard_bot/wg/clients/
+wireguard_bot/config/peers.json
+wireguard_bot/config/archive.json
+wireguard_bot/config/last_ip.json
 
-# Виртуальное окружение
-.venv/
+# Виртуальное окружение подпроекта
+wireguard_bot/.venv/
 
 # OS/IDE
 .DS_Store
